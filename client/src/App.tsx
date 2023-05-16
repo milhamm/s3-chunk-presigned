@@ -27,7 +27,7 @@ type Files = Record<string, FileObj>;
 type UploadToS3Params = FileObj;
 
 const BASE_URL = "http://localhost:8080";
-const CHUNK_SIZE = 5 * 1024 * 1024; // 10MB per chunks
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunks
 
 const api = axios.create({ baseURL: BASE_URL });
 
