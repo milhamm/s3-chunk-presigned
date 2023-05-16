@@ -50,6 +50,12 @@ const splitToChunks = (file: File) => {
 function App() {
   const [filesEntity, setFiles] = useState<Files>({});
 
+  /**
+   * Generates multiple presigned URLs for the given file object to allow uploading to an S3 bucket in chunks.
+   *
+   * @param file The file object for which to generate the presigned URL.
+   * @returns A promise that resolves with an object containing the presigned URL and other details needed for uploading the file.
+   */
   const getPresignedUrls = async (file: File): Promise<FileObj> => {
     const { length, name, chunks } = splitToChunks(file);
 
@@ -64,6 +70,17 @@ function App() {
     );
   };
 
+  /**
+   * Uploads file chunks to an S3 bucket using the generated presigned URLs.
+   * If the upload is successful, the upload is completed by passing the upload ID.
+   * If there is an error, the upload process is aborted using the same upload ID.
+   *
+   * @param params An object containing the necessary parameters for the upload.
+   * @param params.chunks An array of file (Blob[]) chunks to be uploaded.
+   * @param params.preSignedUrls An object containing the presigned URLs for each file chunk.
+   * @param params.uploadId The upload ID associated with the upload.
+   * @param params.filename The name of the file being uploaded.
+   */
   const uploadToS3 = async ({
     chunks,
     preSignedUrls,
@@ -72,6 +89,7 @@ function App() {
   }: UploadToS3Params) => {
     const keys = Object.keys(preSignedUrls);
     const promises = keys.reduce((acc, curr, i) => {
+      // Upload each file chunk to S3 using PUT request
       acc.push(
         axios.put<unknown>(preSignedUrls[+curr], chunks[i]).then((val) => {
           setFiles((files) => ({
@@ -125,8 +143,10 @@ function App() {
     const presignedUrls = await Promise.all(
       files.map((file) => getPresignedUrls(file))
     );
+
     const normalizedResponse = normalize(presignedUrls, "uploadId");
     setFiles(normalizedResponse);
+
     await Promise.all(
       Object.values(normalizedResponse).map((uploadParams) =>
         uploadToS3(uploadParams)
