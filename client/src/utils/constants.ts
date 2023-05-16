@@ -4,5 +4,3 @@ export const FILE_UPLOAD_STATUS = {
   waiting: "waiting",
   error: "error",
 } as const;
-
-export type FileUploadStatus = keyof typeof FILE_UPLOAD_STATUS;

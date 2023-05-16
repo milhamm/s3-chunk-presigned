@@ -12,7 +12,7 @@ import {
 } from "@mantine/core";
 import { IconDots } from "@tabler/icons-react";
 
-import { FileUploadStatus } from "@/utils/constants";
+import { FileUploadStatus } from "@/types";
 import { noop } from "@/utils/noop";
 
 type MenuActions = {
