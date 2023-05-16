@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -14,8 +16,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+var letterRunes = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
 type PreSignedRequest struct {
 	Filename string `json:"filename"`
+	Filesize string `json:"filesize"`
 	Parts    int64  `json:"parts"`
 }
 
@@ -23,12 +28,14 @@ type AbortRequest struct {
 	Filename string `json:"filename"`
 }
 
+type CompleteParts struct {
+	ETag       string `json:"eTag"`
+	PartNumber int64  `json:"partNumber"`
+}
+
 type CompleteRequest struct {
-	Filename       string `json:"filename"`
-	CompletedParts struct {
-		ETag       string `json:"eTag"`
-		PartNumber int64  `json:"partNumber"`
-	} `json:"completedParts"`
+	Filename       string          `json:"filename"`
+	CompletedParts []CompleteParts `json:"completedParts"`
 }
 
 type GenericError struct {
@@ -38,12 +45,27 @@ type GenericError struct {
 
 type PresignedResponse struct {
 	Filename      string           `json:"filename"`
-	PreSignedURLS map[int64]string `json:"preSignedUrl"`
+	PreSignedURLS map[int64]string `json:"preSignedUrls"`
+	UploadId      string           `json:"uploadId"`
 }
 
 type App struct {
 	S3Session *s3.S3
 	Bucket    string
+}
+
+func AsCompletedMultipartParts(pr CompleteRequest) []*s3.CompletedPart {
+	parts := pr.CompletedParts
+	completedParts := make([]*s3.CompletedPart, len(pr.CompletedParts))
+
+	for i := 0; i < len(parts); i++ {
+		completedParts[i] = &s3.CompletedPart{
+			ETag:       &parts[i].ETag,
+			PartNumber: &parts[i].PartNumber,
+		}
+	}
+
+	return completedParts
 }
 
 func (a *App) GeneratePreSignedUrl(c echo.Context) error {
@@ -60,9 +82,11 @@ func (a *App) GeneratePreSignedUrl(c echo.Context) error {
 
 	var signedUrlMap map[int64]string = make(map[int64]string)
 
+	keyName := fmt.Sprintf("%s_%s", RandStringRunes(5), r.Filename)
+
 	res, _ := a.S3Session.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
-		Bucket: aws.String(os.Getenv("S3_BUCKET")),
-		Key:    &r.Filename,
+		Bucket: aws.String(a.Bucket),
+		Key:    aws.String(keyName),
 	})
 
 	uploadId := res.UploadId
@@ -70,7 +94,7 @@ func (a *App) GeneratePreSignedUrl(c echo.Context) error {
 	for i := int64(1); i <= r.Parts; i++ {
 		req, _ := a.S3Session.UploadPartRequest(&s3.UploadPartInput{
 			Bucket:     aws.String(a.Bucket),
-			Key:        &r.Filename,
+			Key:        aws.String(keyName),
 			PartNumber: aws.Int64(i),
 			UploadId:   uploadId,
 		})
@@ -79,8 +103,9 @@ func (a *App) GeneratePreSignedUrl(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &PresignedResponse{
-		Filename:      r.Filename,
+		Filename:      keyName,
 		PreSignedURLS: signedUrlMap,
+		UploadId:      *uploadId,
 	})
 }
 
@@ -122,17 +147,14 @@ func (a *App) CompleteMultiPartUpload(c echo.Context) error {
 		})
 	}
 
+	parts := AsCompletedMultipartParts(*r)
+
 	resp, err := a.S3Session.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(a.Bucket),
 		Key:      aws.String(r.Filename),
 		UploadId: aws.String(uploadId),
 		MultipartUpload: &s3.CompletedMultipartUpload{
-			Parts: []*s3.CompletedPart{
-				{
-					ETag:       &r.CompletedParts.ETag,
-					PartNumber: &r.CompletedParts.PartNumber,
-				},
-			},
+			Parts: parts,
 		},
 	})
 
@@ -179,4 +201,14 @@ func main() {
 	e.POST("/upload/:uploadId/abort", app.AbortMultiPartUpload)
 	e.POST("/upload/:uploadId/complete", app.CompleteMultiPartUpload)
 	e.Logger.Fatal(e.Start(":8080"))
+}
+
+func RandStringRunes(n int) string {
+	b := make([]rune, n)
+
+	for i := range b {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		b[i] = letterRunes[r.Intn(len(letterRunes))]
+	}
+	return string(b)
 }
