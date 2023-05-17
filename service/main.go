@@ -98,7 +98,7 @@ func (a *App) GeneratePreSignedUrl(c echo.Context) error {
 			PartNumber: aws.Int64(i),
 			UploadId:   uploadId,
 		})
-		urlStr, _ := req.Presign(2 * time.Minute)
+		urlStr, _ := req.Presign(1 * time.Hour)
 		signedUrlMap[i] = urlStr
 	}
 
