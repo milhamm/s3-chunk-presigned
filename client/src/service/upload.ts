@@ -4,11 +4,16 @@ import api from "@/client/api";
 import { Chunks } from "@/types";
 import { FILE_UPLOAD_STATUS } from "@/utils/constants";
 
-type GetPresignedURLSParams = {
-  file: File;
-  filename: string;
-  parts: number;
-  chunks: Chunks;
+type InitUploadParams = {
+  file: string;
+};
+
+type InitResponose = string;
+
+type GenerateUploadParams = {
+  file: string;
+  uploadId: string;
+  partsCount: number;
 };
 
 type PutChunksToS3Response = AxiosResponse<unknown, unknown>;
@@ -23,6 +28,8 @@ type PutChunksToS3Params = {
   onAbort: () => void;
 };
 
+export type GenerateResponse = string[];
+
 export type PresignedResponse = {
   filename: string;
   preSignedUrls: Record<number, string>;
@@ -30,21 +37,21 @@ export type PresignedResponse = {
 };
 
 export const UploadService = {
-  async getPresignedUrls({
-    filename,
-    parts,
-    chunks,
-    file,
-  }: GetPresignedURLSParams) {
-    const { data } = await api.post<PresignedResponse>(`/upload`, {
-      filename,
-      parts,
+  async init({ file }: InitUploadParams) {
+    const { data } = await api.post<InitResponose>(`/files/init`, {
+      file,
     });
 
-    return Object.assign(
-      { chunks, file, status: FILE_UPLOAD_STATUS.waiting, progress: 0 },
-      data
-    );
+    return data;
+  },
+  async generate({ partsCount, file, uploadId }: GenerateUploadParams) {
+    const { data } = await api.post<GenerateResponse>(`/files/generate`, {
+      partsCount,
+      file,
+      uploadId,
+    });
+
+    return data;
   },
 
   putChunksToS3({

@@ -9,7 +9,7 @@ import { File, FileUploadDropzone } from "@/ui";
 import { FILE_UPLOAD_STATUS } from "@/utils/constants";
 import { normalize } from "@/utils/normalize";
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunks
+const CHUNK_SIZE = 10 * 1024 * 1024; // 5MB per chunks
 
 const splitToChunks = (file: File) => {
   const { size, name } = file;
@@ -49,12 +49,14 @@ function App() {
    * @param file The file object for which to generate the presigned URL.
    * @returns A promise that resolves with an object containing the presigned URL and other details needed for uploading the file.
    */
-  const getPresignedUrls = async (file: File): Promise<FileObj> => {
+  const initAndGeneratePreSignedUrls = async (file: File) => {
     const chunks = splitToChunks(file);
 
-    const response = await UploadService.getPresignedUrls({
-      file,
-      ...chunks,
+    const uploadId = await UploadService.init({ file: file.name });
+    const response = await UploadService.generate({
+      uploadId,
+      file: chunks.filename,
+      partsCount: chunks.parts,
     });
 
     return response;
@@ -98,17 +100,19 @@ function App() {
 
   const handleOnDrop = async (files: FileWithPath[]) => {
     const presignedUrls = await Promise.all(
-      files.map((file) => getPresignedUrls(file))
+      files.map((file) => initAndGeneratePreSignedUrls(file))
     );
 
-    const normalizedResponse = normalize(presignedUrls, "uploadId");
-    setFiles(normalizedResponse);
+    console.log({ presignedUrls });
 
-    await Promise.all(
-      Object.values(normalizedResponse).map((uploadParams) =>
-        uploadToS3(uploadParams)
-      )
-    );
+    // const normalizedResponse = normalize(presignedUrls, "uploadId");
+    // setFiles(normalizedResponse);
+
+    // await Promise.all(
+    //   Object.values(normalizedResponse).map((uploadParams) =>
+    //     uploadToS3(uploadParams)
+    //   )
+    // );
   };
 
   return (
